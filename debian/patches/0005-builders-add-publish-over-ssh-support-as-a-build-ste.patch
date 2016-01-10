@@ -1,0 +1,205 @@
+Subject: builders: add 'publish over ssh' support as a build step
+ 'Publish over SSH' plugin is only supported in the publishers. It can also be
+ used as a build step during the build process.
+ .
+ Adjustments to publishers.base_publish_over() method:
+  * fix the missing top delegate
+  * re-order command, timeout and use-pty as in Jenkins
+Author: Fathi Boudra <fathi.boudra@linaro.org>
+Date: Fri, 6 Jun 2014 17:50:26 +0300
+Change-Id: Id45ef1b84b88213d8673f34597571ca56e3ff986
+Origin: upstream, https://review.openstack.org/#/c/98437/
+Last-Update: 2015-08-28
+
+Index: jenkins-job-builder/jenkins_jobs/modules/builders.py
+===================================================================
+--- jenkins-job-builder.orig/jenkins_jobs/modules/builders.py
++++ jenkins-job-builder/jenkins_jobs/modules/builders.py
+@@ -50,6 +50,7 @@ from jenkins_jobs.modules.helpers import
+ from jenkins_jobs.errors import (JenkinsJobsException,
+                                  MissingAttributeError,
+                                  InvalidAttributeError)
++from jenkins_jobs.modules.publishers import base_publish_over
+ import logging
+ 
+ logger = logging.getLogger(__name__)
+@@ -1808,6 +1809,52 @@ def critical_block_end(parser, xml_paren
+     cbs.set('plugin', 'Exclusion')
+ 
+ 
++def ssh(parser, xml_parent, data):
++    """yaml: ssh
++    Send files or execute commands over SSH.
++    Requires the Jenkins `Publish over SSH Plugin.
++    <https://wiki.jenkins-ci.org/display/JENKINS/Publish+Over+SSH+Plugin>`_
++
++    :arg str site: name of the ssh site
++    :arg str target: destination directory
++    :arg bool target-is-date-format: whether target is a date format. If true,
++      raw text should be quoted (defaults to False)
++    :arg bool clean-remote: should the remote directory be deleted before
++      transferring files (defaults to False)
++    :arg str source: source path specifier
++    :arg str command: a command to execute on the remote server (optional)
++    :arg int timeout: timeout in milliseconds for the Exec command (optional)
++    :arg bool use-pty: run the exec command in pseudo TTY (defaults to False)
++    :arg str excludes: excluded file pattern (optional)
++    :arg str remove-prefix: prefix to remove from uploaded file paths
++      (optional)
++    :arg bool fail-on-error: fail the build if an error occurs (defaults to
++      False).
++
++    Example::
++
++      builders:
++        - ssh:
++            site: 'server.example.com'
++            target: 'dest/dir'
++            source: 'base/source/dir/**'
++            remove-prefix: 'base/source/dir'
++            excludes: '**/*.excludedfiletype'
++            use-pty: true
++            command: 'rm -r jenkins_$BUILD_NUMBER'
++            timeout: 1800000
++    """
++    console_prefix = 'SSH: '
++    tag_prefix = 'jenkins.plugins.publish'
++    plugin_tag = '%s__over__ssh.BapSshBuilderPlugin' % tag_prefix
++    publisher_tag = '%s__over__ssh.BapSshPublisher' % tag_prefix
++    transfer_tag = '%s__over__ssh.BapSshTransfer' % tag_prefix
++    reference_tag = '%s_over_ssh.BapSshPublisherPlugin' % tag_prefix
++
++    base_publish_over(xml_parent, data, console_prefix, plugin_tag,
++                      publisher_tag, transfer_tag, reference_tag)
++
++
+ class Builders(jenkins_jobs.modules.base.Base):
+     sequence = 60
+ 
+Index: jenkins-job-builder/jenkins_jobs/modules/publishers.py
+===================================================================
+--- jenkins-job-builder.orig/jenkins_jobs/modules/publishers.py
++++ jenkins-job-builder/jenkins_jobs/modules/publishers.py
+@@ -2112,24 +2112,21 @@ def base_publish_over(xml_parent, data,
+                       plugin_tag, publisher_tag,
+                       transferset_tag, reference_plugin_tag):
+     outer = XML.SubElement(xml_parent, plugin_tag)
+-    XML.SubElement(outer, 'consolePrefix').text = console_prefix
+-    delegate = XML.SubElement(outer, 'delegate')
++    top_delegate = XML.SubElement(outer, 'delegate')
++    XML.SubElement(top_delegate, 'consolePrefix').text = console_prefix
++
++    delegate = XML.SubElement(top_delegate, 'delegate')
+     publishers = XML.SubElement(delegate, 'publishers')
++
+     inner = XML.SubElement(publishers, publisher_tag)
+     XML.SubElement(inner, 'configName').text = data['site']
+     XML.SubElement(inner, 'verbose').text = 'true'
+ 
+     transfers = XML.SubElement(inner, 'transfers')
+     transfersset = XML.SubElement(transfers, transferset_tag)
++
+     XML.SubElement(transfersset, 'remoteDirectory').text = data['target']
+     XML.SubElement(transfersset, 'sourceFiles').text = data['source']
+-    if 'command' in data:
+-        XML.SubElement(transfersset, 'execCommand').text = data['command']
+-    if 'timeout' in data:
+-        XML.SubElement(transfersset, 'execTimeout').text = str(data['timeout'])
+-    if 'use-pty' in data:
+-        XML.SubElement(transfersset, 'usePty').text = \
+-            str(data.get('use-pty', False)).lower()
+     XML.SubElement(transfersset, 'excludes').text = data.get('excludes', '')
+     XML.SubElement(transfersset, 'removePrefix').text = \
+         data.get('remove-prefix', '')
+@@ -2140,16 +2137,25 @@ def base_publish_over(xml_parent, data,
+     XML.SubElement(transfersset, 'cleanRemote').text = \
+         str(data.get('clean-remote', False)).lower()
+ 
++    if 'command' in data:
++        XML.SubElement(transfersset, 'execCommand').text = data['command']
++    if 'timeout' in data:
++        XML.SubElement(transfersset, 'execTimeout').text = str(data['timeout'])
++    if 'use-pty' in data:
++        XML.SubElement(transfersset, 'usePty').text = \
++            str(data.get('use-pty', False)).lower()
++
+     XML.SubElement(inner, 'useWorkspaceInPromotion').text = 'false'
+     XML.SubElement(inner, 'usePromotionTimestamp').text = 'false'
++
+     XML.SubElement(delegate, 'continueOnError').text = 'false'
+     XML.SubElement(delegate, 'failOnError').text = \
+         str(data.get('fail-on-error', False)).lower()
+     XML.SubElement(delegate, 'alwaysPublishFromMaster').text = \
+         str(data.get('always-publish-from-master', False)).lower()
+     XML.SubElement(delegate, 'hostConfigurationAccess',
+-                   {'class': reference_plugin_tag,
+-                    'reference': '../..'})
++                   {'class': reference_plugin_tag, 'reference': '../..'})
++
+     return (outer, transfersset)
+ 
+ 
+Index: jenkins-job-builder/setup.cfg
+===================================================================
+--- jenkins-job-builder.orig/setup.cfg
++++ jenkins-job-builder/setup.cfg
+@@ -87,6 +87,7 @@ jenkins_jobs.builders =
+     sonatype-clm=jenkins_jobs.modules.builders:sonatype_clm
+     ssh-builder=jenkins_jobs.modules.builders:ssh_builder
+     system-groovy=jenkins_jobs.modules.builders:system_groovy
++    ssh=jenkins_jobs.modules.builders:ssh
+     trigger-builds=jenkins_jobs.modules.builders:trigger_builds
+     trigger-remote=jenkins_jobs.modules.builders:trigger_remote
+ jenkins_jobs.reporters =
+Index: jenkins-job-builder/tests/builders/fixtures/ssh.xml
+===================================================================
+--- /dev/null
++++ jenkins-job-builder/tests/builders/fixtures/ssh.xml
+@@ -0,0 +1,36 @@
++<?xml version="1.0" encoding="utf-8"?>
++<project>
++  <builders>
++    <jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin>
++      <delegate>
++        <consolePrefix>SSH: </consolePrefix>
++        <delegate>
++          <publishers>
++            <jenkins.plugins.publish__over__ssh.BapSshPublisher>
++              <configName>server.example.com</configName>
++              <verbose>true</verbose>
++              <transfers>
++                <jenkins.plugins.publish__over__ssh.BapSshTransfer>
++                  <remoteDirectory>dest/dir</remoteDirectory>
++                  <sourceFiles>base/source/dir/**</sourceFiles>
++                  <excludes/>
++                  <removePrefix/>
++                  <remoteDirectorySDF>false</remoteDirectorySDF>
++                  <flatten>false</flatten>
++                  <cleanRemote>false</cleanRemote>
++                  <execTimeout>1800000</execTimeout>
++                </jenkins.plugins.publish__over__ssh.BapSshTransfer>
++              </transfers>
++              <useWorkspaceInPromotion>false</useWorkspaceInPromotion>
++              <usePromotionTimestamp>false</usePromotionTimestamp>
++            </jenkins.plugins.publish__over__ssh.BapSshPublisher>
++          </publishers>
++          <continueOnError>false</continueOnError>
++          <failOnError>false</failOnError>
++          <alwaysPublishFromMaster>false</alwaysPublishFromMaster>
++          <hostConfigurationAccess class="jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin" reference="../.."/>
++        </delegate>
++      </delegate>
++    </jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin>
++  </builders>
++</project>
+Index: jenkins-job-builder/tests/builders/fixtures/ssh.yaml
+===================================================================
+--- /dev/null
++++ jenkins-job-builder/tests/builders/fixtures/ssh.yaml
+@@ -0,0 +1,6 @@
++builders:
++    - ssh:
++        site: 'server.example.com'
++        target: 'dest/dir'
++        source: 'base/source/dir/**'
++        timeout: 1800000

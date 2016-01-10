@@ -1,0 +1,13 @@
+ Upstream still wants argparse and ordereddict, this patch removes it from
+ requirements.txt
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: not-needed
+Last-Update: 2015-12-15
+
+--- jenkins-job-builder-1.3.0+2015.12.15.git136.959eb4b909.orig/requirements.txt
++++ jenkins-job-builder-1.3.0+2015.12.15.git136.959eb4b909/requirements.txt
+@@ -1,4 +1,3 @@
+-ordereddict
+ six>=1.5.2
+ PyYAML
+ python-jenkins>=0.4.8

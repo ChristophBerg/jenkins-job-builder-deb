@@ -1,0 +1,69 @@
+#!/usr/bin/make -f
+
+PYTHONS:=$(shell pyversions -vr)
+PYTHON3S:=$(shell py3versions -vr)
+
+UPSTREAM_GIT = git://github.com/openstack-infra/jenkins-job-builder.git
+include /usr/share/openstack-pkg-tools/pkgos.make
+
+export OSLO_PACKAGE_VERSION=$(shell dpkg-parsechangelog | grep Version: | cut -d' ' -f2 | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/~/.0/' | head -n 1)
+
+LAST_CHANGE = $(shell dpkg-parsechangelog -S Date)
+BUILD_DATE  = $(shell LC_ALL=C date -u "+%B %d, %Y" -d "$(LAST_CHANGE)")
+SPHINXOPTS := -D html_last_updated_fmt="$(BUILD_DATE)"
+
+%:
+	dh $@ --with python2,python3,sphinxdoc
+
+override_dh_clean:
+	rm -rf doc/build build .testrepository
+
+override_dh_installman:
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	sphinx-build $(SPHINXOPTS) -b man doc/source doc/build/man
+endif
+
+override_dh_install:
+	set -e ; for pyvers in $(PYTHONS); do \
+		python$$pyvers setup.py install --install-layout=deb \
+			--root $(CURDIR)/debian/python-jenkins-job-builder; \
+	done
+	set -e ; for pyvers in $(PYTHON3S); do \
+		python$$pyvers setup.py install --install-layout=deb \
+			--root $(CURDIR)/debian/python3-jenkins-job-builder; \
+	done
+	mv $(CURDIR)/debian/python-jenkins-job-builder/usr/bin/jenkins-jobs $(CURDIR)/debian/python-jenkins-job-builder/usr/bin/python2-jenkins-job-builder
+	mv $(CURDIR)/debian/python3-jenkins-job-builder/usr/bin/jenkins-jobs $(CURDIR)/debian/python3-jenkins-job-builder/usr/bin/python3-jenkins-job-builder
+	rm -f $(CURDIR)/debian/python*/usr/lib/python*/dist-packages/*.pth
+
+
+override_dh_auto_install:
+	dh_auto_install -- --install-lib=/usr/share/jenkins-job-builder
+
+#	mv debian/jenkins-job-builder/usr/bin/jenkins-jobs \
+#		debian/jenkins-job-builder/usr/share/jenkins-job-builder
+
+override_dh_auto_test:
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+	@echo "===> Running tests"
+	set -e ; set -x ; for i in 2.7 $(PYTHON3S) ; do \
+		PYMAJOR=`echo $$i | cut -d'.' -f1` ; \
+		echo "===> Testing with python$$i (python$$PYMAJOR)" ; \
+		rm -rf .testrepository ; \
+		testr-python$$PYMAJOR init ; \
+		TEMP_REZ=`mktemp -t` ; \
+		PYTHONPATH=$(CURDIR) PYTHON=python$$i testr-python$$PYMAJOR run --subunit 'tests\.(?!(.*TestCaseModuleBuilders\.test_yaml_snippet.*|.*TestCaseModulePublishers\.test_yaml_snippet.*|.*builder\.test_builder\.TestCaseTestBuilder\.test_plugins_list.*|.*builder\.test_builder\.TestCaseTestBuilder\.test_plugins_list_from_jenkins.*|.*localyaml\.test_localyaml\.TestCaseLocalYamlIncludeAnchors\.test_multiple_same_anchor_in_multiple_toplevel_yaml.*))' | tee $$TEMP_REZ | subunit2pyunit ; \
+		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats ; \
+		rm -f $$TEMP_REZ ; \
+		testr-python$$PYMAJOR slowest ; \
+	done
+endif
+
+override_dh_sphinxdoc:
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	PYTHONPATH=. sphinx-build $(SPHINXOPTS) -b html doc/source debian/jenkins-job-builder-doc/usr/share/doc/jenkins-job-builder-doc/html
+	dh_sphinxdoc -O--buildsystem=python_distutils
+endif
+
+override_dh_python3:
+	dh_python3 --shebang=/usr/bin/python3

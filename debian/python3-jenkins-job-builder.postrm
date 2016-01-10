@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "disappear" ] ; then
+	update-alternatives --remove jenkins-job-builder /usr/bin/python3-jenkins-job-builder
+fi
+
+#DEBHELPER#
+
+exit 0

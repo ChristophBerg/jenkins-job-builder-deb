@@ -1,0 +1,3 @@
+0001-workaround-programoutput.patch
+0005-builders-add-publish-over-ssh-support-as-a-build-ste.patch
+removes-deprecated-depends.patch

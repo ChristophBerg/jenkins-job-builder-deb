@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ] ; then
+	update-alternatives --install /usr/bin/jenkins-job-builder jenkins-job-builder /usr/bin/python2-jenkins-job-builder 300
+fi
+
+#DEBHELPER#
+
+exit 0

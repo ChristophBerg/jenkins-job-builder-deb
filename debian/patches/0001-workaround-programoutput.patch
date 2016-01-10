@@ -1,0 +1,32 @@
+From: Philip Hands <phil@hands.com>
+Date: Fri, 19 Jun 2015 05:59:50 +0100
+Subject: workaround-programoutput
+Change-Id: I8f322bd6c2b0f39663208e9f598cecfcad1ff63c
+Last-Update: 2015-08-28
+
+Index: jenkins-job-builder/doc/source/execution.rst
+===================================================================
+--- jenkins-job-builder.orig/doc/source/execution.rst
++++ jenkins-job-builder/doc/source/execution.rst
+@@ -271,11 +271,16 @@ To delete jobs that only have 'foo' in t
+ 
+ Command Reference
+ ^^^^^^^^^^^^^^^^^
+-.. program-output:: jenkins-jobs --help
+-.. program-output:: jenkins-jobs test --help
+-.. program-output:: jenkins-jobs update --help
+-.. program-output:: jenkins-jobs delete-all --help
+-.. program-output:: jenkins-jobs delete --help
++.. program-output:: cd ../.. && ./tools/jenkins-jobs.py --help
++   :shell:
++.. program-output:: cd ../.. && ./tools/jenkins-jobs.py test --help
++   :shell:
++.. program-output:: cd ../.. && ./tools/jenkins-jobs.py update --help
++   :shell:
++.. program-output:: cd ../.. && ./tools/jenkins-jobs.py delete-all --help
++   :shell:
++.. program-output:: cd ../.. && ./tools/jenkins-jobs.py delete --help
++   :shell:
+ 
+ .. rubric:: Footnotes
+ .. [#f1] The cache default location is at ``~/.cache/jenkins_jobs``, which
