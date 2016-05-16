@@ -29,10 +29,10 @@ Build-Depends-Indep: python-fixtures,
                      python3-yaml,
                      subunit,
                      testrepository,
-Standards-Version: 3.9.6
+Standards-Version: 3.9.7
 Homepage: http://ci.openstack.org/jenkins-job-builder
-Vcs-Git: git://github.com/pabelanger/jenkins-job-builder-deb.git
-Vcs-Browser: https://github.com/pabelanger/jenkins-job-builder-deb
+Vcs-Browser: https://anonscm.debian.org/cgit/openstack/jenkins-job-builder.git/
+Vcs-Git: https://anonscm.debian.org/git/openstack/jenkins-job-builder.git
 
 Package: python-jenkins-job-builder
 Architecture: all
